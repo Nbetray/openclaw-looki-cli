@@ -1,0 +1,50 @@
+{
+  "name": "@nbetray/openclaw-looki-cli",
+  "version": "0.1.0",
+  "description": "Lightweight installer for the OpenClaw Looki channel plugin",
+  "license": "MIT",
+  "author": "nbetray",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nbetray/openclaw-looki-cli"
+  },
+  "homepage": "https://github.com/Nbetray/openclaw-looki-cli",
+  "bugs": {
+    "url": "https://github.com/Nbetray/openclaw-looki-cli/issues"
+  },
+  "type": "module",
+  "bin": {
+    "looki-installer": "./cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "check": "node --check cli.mjs",
+    "stage:version-files": "git add package.json package-lock.json",
+    "version": "npm run stage:version-files",
+    "prepublishOnly": "npm run check"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.1.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.24"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "openclaw": "2026.3.24"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
