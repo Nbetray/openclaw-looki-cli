@@ -34,6 +34,13 @@ const SUPPORTED_FORWARD_PLUGINS = [
     accountId: "default",
     hint: "把 Looki 的 Agent 输出转发到飞书(FeiShu)",
   },
+  {
+    id: "openclaw-weixin",
+    detectIds: ["openclaw-weixin", "@tencent-weixin/openclaw-weixin"],
+    label: "微信(Weixin)",
+    channel: "openclaw-weixin",
+    hint: "把 Looki 的 Agent 输出转发到微信(Weixin)",
+  },
 ];
 
 let currentLocale = DEFAULT_LOCALE;
@@ -91,6 +98,10 @@ const MESSAGES = {
     allowFromTitle: "飞书(FeiShu)候选",
     allowFromDetected: ({ values }) => `检测到现有飞书(FeiShu) allowFrom：${values}`,
     feishuToMessage: "填写飞书(FeiShu) to（Esc 返回）",
+    weixinAccountsTitle: "微信(Weixin)账号",
+    weixinAccountsDetected: ({ values }) => `检测到已登录微信账号：${values}`,
+    weixinAccountIdMessage: "填写微信(Weixin) accountId（Esc 返回）",
+    weixinToMessage: "填写微信(Weixin) to / user_id（Esc 返回）",
     forwardTargetMessage: "请选择需要转发 Agent 输出的聊天插件",
     doneLabel: "完成",
     doneHint: ({ count }) => (count > 0 ? `已完成 ${count} 项` : "暂不配置转发"),
@@ -158,6 +169,10 @@ const MESSAGES = {
     allowFromTitle: "FeiShu Candidates",
     allowFromDetected: ({ values }) => `Detected FeiShu allowFrom values: ${values}`,
     feishuToMessage: "Enter FeiShu to (Esc to go back)",
+    weixinAccountsTitle: "Weixin Accounts",
+    weixinAccountsDetected: ({ values }) => `Detected logged-in Weixin accounts: ${values}`,
+    weixinAccountIdMessage: "Enter Weixin accountId (Esc to go back)",
+    weixinToMessage: "Enter Weixin to / user_id (Esc to go back)",
     forwardTargetMessage: "Choose chat plugins for Agent output forwarding",
     doneLabel: "Done",
     doneHint: ({ count }) => (count > 0 ? `${count} configured` : "Skip forwarding for now"),
@@ -343,6 +358,17 @@ function getExistingForwardChannels(config) {
     .filter(Boolean);
 }
 
+function getWeixinAccountIds() {
+  const filePath = path.join(getStateDir(), "openclaw-weixin", "accounts.json");
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((entry) => String(entry).trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 function isValidFeishuTo(value, candidates) {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return false;
@@ -389,14 +415,34 @@ async function promptTextOrBack(message, { placeholder, defaultValue, validate }
 function buildForwardTargets(selectedTargets, toValues) {
   return selectedTargets.map((target) => ({
     channel: target.channel,
-    accountId: target.accountId,
+    ...(toValues.accountIds?.[target.id] || target.accountId
+      ? { accountId: toValues.accountIds?.[target.id] || target.accountId }
+      : {}),
     to: toValues[target.id],
   }));
 }
 
-function buildForwardSelectionOptions(targets, validTargetIds, draftValues, doneValue) {
+function formatDraftHint(target, draftValues, draftAccountIds) {
+  const to = draftValues[target.id];
+  const accountId = draftAccountIds[target.id] || target.accountId;
+  if (!to && !accountId) return "";
+  if (target.channel === "openclaw-weixin") {
+    return [accountId ? `accountId=${accountId}` : "", to ? `to=${to}` : ""].filter(Boolean).join(" ");
+  }
+  return to;
+}
+
+function isForwardTargetDraftValid(target, draftValues, draftAccountIds, config) {
+  const to = draftValues[target.id];
+  if (!to) return false;
+  if (target.channel === "feishu") return isValidFeishuTo(to, getExistingFeishuAllowFrom(config));
+  if (target.channel === "openclaw-weixin") return Boolean(draftAccountIds[target.id] || target.accountId);
+  return true;
+}
+
+function buildForwardSelectionOptions(targets, validTargetIds, draftValues, draftAccountIds, doneValue) {
   return targets.map((target) => {
-    const currentValue = draftValues[target.id];
+    const currentValue = formatDraftHint(target, draftValues, draftAccountIds);
     const configured = validTargetIds.includes(target.id);
     return {
       value: target.id,
@@ -456,6 +502,29 @@ async function configureFeishuTarget(target, config, draftValues) {
   return value;
 }
 
+async function configureWeixinTarget(target, draftValues, draftAccountIds) {
+  const accountIds = getWeixinAccountIds();
+  if (accountIds.length > 0) {
+    await note(t("weixinAccountsDetected", { values: accountIds.join(", ") }), t("weixinAccountsTitle"));
+  }
+
+  const accountId = await promptTextOrBack(t("weixinAccountIdMessage"), {
+    placeholder: accountIds[0] || "weixin-account-id",
+    defaultValue: draftAccountIds[target.id] || accountIds[0] || undefined,
+    validate: (input) => (String(input ?? "").trim() ? undefined : t("requiredField")),
+  });
+  if (accountId === null) return null;
+
+  const to = await promptTextOrBack(t("weixinToMessage"), {
+    placeholder: "weixin_user_id",
+    defaultValue: draftValues[target.id] || undefined,
+    validate: (input) => (String(input ?? "").trim() ? undefined : t("requiredField")),
+  });
+  if (to === null) return null;
+
+  return { accountId, to };
+}
+
 function buildInitialDraftValues(config, availableTargets) {
   const currentTargets = Array.isArray(config?.channels?.[CHANNEL_ID]?.forwardTo)
     ? [...config.channels[CHANNEL_ID].forwardTo]
@@ -478,13 +547,33 @@ function buildInitialDraftValues(config, availableTargets) {
   );
 }
 
+function buildInitialDraftAccountIds(config, availableTargets) {
+  const currentTargets = Array.isArray(config?.channels?.[CHANNEL_ID]?.forwardTo)
+    ? [...config.channels[CHANNEL_ID].forwardTo]
+    : [];
+  const usedIndexes = new Set();
+
+  return Object.fromEntries(
+    availableTargets.map((target) => {
+      const matchedIndex = currentTargets.findIndex((entry, entryIndex) => {
+        if (usedIndexes.has(entryIndex)) return false;
+        return entry?.channel === target.channel;
+      });
+      const matched = matchedIndex >= 0 ? currentTargets[matchedIndex] : null;
+      if (matchedIndex >= 0) usedIndexes.add(matchedIndex);
+      return [
+        target.id,
+        matched?.accountId || target.accountId || "",
+      ];
+    }),
+  );
+}
+
 async function configureForwardTargets(config, availableTargets) {
   const draftValues = buildInitialDraftValues(config, availableTargets);
+  const draftAccountIds = buildInitialDraftAccountIds(config, availableTargets);
   let validTargetIds = availableTargets
-    .filter((target) => Boolean(draftValues[target.id]))
-    .filter((target) =>
-      target.channel !== "feishu" || isValidFeishuTo(draftValues[target.id], getExistingFeishuAllowFrom(config)),
-    )
+    .filter((target) => isForwardTargetDraftValid(target, draftValues, draftAccountIds, config))
     .map((target) => target.id);
   const doneValue = "__done__";
 
@@ -492,15 +581,13 @@ async function configureForwardTargets(config, availableTargets) {
     await noteForwardListControls();
     const choice = guardCancel(await select({
       message: t("forwardTargetMessage"),
-      options: buildForwardSelectionOptions(availableTargets, validTargetIds, draftValues, doneValue),
+      options: buildForwardSelectionOptions(availableTargets, validTargetIds, draftValues, draftAccountIds, doneValue),
       initialValue: validTargetIds[0] || availableTargets[0]?.id || doneValue,
     }));
 
     if (choice === doneValue) {
-      return buildForwardTargets(
-        availableTargets.filter((target) => validTargetIds.includes(target.id)),
-        draftValues,
-      );
+      draftValues.accountIds = draftAccountIds;
+      return buildForwardTargets(availableTargets.filter((target) => validTargetIds.includes(target.id)), draftValues);
     }
 
     const target = availableTargets.find((item) => item.id === choice);
@@ -510,6 +597,7 @@ async function configureForwardTargets(config, availableTargets) {
     if (action === "back") continue;
     if (action === "clear") {
       draftValues[target.id] = "";
+      draftAccountIds[target.id] = target.accountId || "";
       validTargetIds = validTargetIds.filter((id) => id !== target.id);
       continue;
     }
@@ -519,6 +607,19 @@ async function configureForwardTargets(config, availableTargets) {
       if (value === null) continue;
       draftValues[target.id] = value;
       if (isValidFeishuTo(value, getExistingFeishuAllowFrom(config))) {
+        validTargetIds = [...validTargetIds, target.id].filter((value, index, array) => array.indexOf(value) === index);
+      } else {
+        validTargetIds = validTargetIds.filter((id) => id !== target.id);
+      }
+      continue;
+    }
+
+    if (target.channel === "openclaw-weixin") {
+      const value = await configureWeixinTarget(target, draftValues, draftAccountIds);
+      if (value === null) continue;
+      draftValues[target.id] = value.to;
+      draftAccountIds[target.id] = value.accountId;
+      if (isForwardTargetDraftValid(target, draftValues, draftAccountIds, config)) {
         validTargetIds = [...validTargetIds, target.id].filter((value, index, array) => array.indexOf(value) === index);
       } else {
         validTargetIds = validTargetIds.filter((id) => id !== target.id);
