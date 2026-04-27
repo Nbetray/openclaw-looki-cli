@@ -42,8 +42,14 @@ jobs:
             exit 1
           fi
 
-      - name: Check
-        run: npm run check
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
 
       - name: Publish
         run: npm publish --access public --provenance
