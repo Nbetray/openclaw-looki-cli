@@ -1,8 +1,11 @@
 # openclaw-looki-cli
 
-用于安装和配置 `@nbetray/openclaw-looki@latest` 的命令行向导。
+_English: [README.en.md](./README.en.md)_
 
-## 要求
+[openclaw-looki](https://github.com/Nbetray/openclaw-looki) 插件的安装 / 重新
+配置向导。
+
+## 环境要求
 
 - Node.js `>= 22`
 - OpenClaw `>= 2026.4.24`
@@ -13,68 +16,93 @@
 npx -y @nbetray/openclaw-looki-cli@latest install
 ```
 
-也可以先查看帮助：
+向导会完成：
+
+- 安装或更新 `@nbetray/openclaw-looki`
+- 选择 Looki 环境 + 填写 `apiKey`
+- 检测并配置下游 IM 转发（飞书 / 微信 / QQ Bot / LINE / WhatsApp / Telegram /
+  Discord）
+- 写入 OpenClaw 配置并重启 Gateway
+
+查看帮助：
 
 ```bash
 npx -y @nbetray/openclaw-looki-cli@latest help
 ```
 
-向导会完成：
+## 命令
 
-- 安装或更新 Looki 插件
-- 选择 Looki 环境
-- 填写 `apiKey`
-- 可选配置下游 IM 转发
-- 写入配置并重启 OpenClaw Gateway
+| 命令        | 作用                                     |
+| ----------- | ---------------------------------------- |
+| `install`   | 安装 / 更新插件并运行完整向导            |
+| `configure` | 插件已装好时，只重新跑配置向导（不重装） |
+| `help`      | 显示帮助                                 |
 
-环境对应地址：
+## 选项
+
+所有选项都同时适用于 `install` 和 `configure`。
+
+| 选项               | 作用                                        |
+| ------------------ | ------------------------------------------- |
+| `--base-url <url>` | 跳过环境选择，直接使用指定 URL              |
+| `--api-key <key>`  | 跳过 apiKey 交互                            |
+| `--locale <code>`  | 强制指定界面语言：`zh-CN` 或 `en`           |
+| `--no-restart`     | 写入配置后不执行 `openclaw gateway restart` |
+
+非交互示例（CI 场景）：
+
+```bash
+npx -y @nbetray/openclaw-looki-cli@latest \
+  --locale zh-CN --no-restart \
+  --base-url https://open.looki.ai \
+  --api-key "$LOOKI_API_KEY" \
+  configure
+```
+
+## 界面语言持久化
+
+第一次运行时你选的中文 / 英文会写入 `~/.openclaw/openclaw.json` 的
+`openclaw-looki-cli.locale`。之后的运行会直接复用，除非你传 `--locale` 覆盖。
+
+## 环境地址
 
 - `Global` → `https://open.looki.ai`
 - `China` → `https://open.looki.tech`
 
 ## 转发支持
 
-安装器会检测已安装的下游 IM 插件，并通过 Looki 的 `forwardTo` 写入统一 runtime outbound 配置。
+安装器会检测已装的下游 IM 插件，逐个提示配置 `forwardTo`。当前支持：
 
-当前支持：
-
-- `feishu`：飞书 / Lark（由 `@larksuite/openclaw-lark` 提供）
+- `feishu`：飞书 / Lark
 - `openclaw-weixin`：微信 / WeChat
 - `qqbot`：QQ Bot
-- `line`：LINE
-- `whatsapp`：WhatsApp
-- `telegram`：Telegram
-- `discord`：Discord
+- `line`
+- `whatsapp`
+- `telegram`
+- `discord`
 
-## 飞书 / Lark 转发说明
+飞书的 `to` 需要在 Feishu 插件已有的 `allowFrom` 候选里；微信和 QQ Bot 会尽量
+从本地状态（`openclaw-weixin/accounts/*.context-tokens.json` 和
+`qqbot/data/known-users.json`）自动预填候选。
 
-- 检测到 `@larksuite/openclaw-lark` / `feishu` 时可配置转发
-- `to` 需要填写目标飞书 / Lark 用户的 `open_id`
-- 安装器不会自动帮你填写默认 `to`
+## 错误提示
 
-## 微信 / WeChat 转发说明
+`openclaw plugins install` / `update` / `gateway restart` 失败时，CLI 会打印
+stderr，并尝试根据错误内容给出本地化的「提示」，覆盖常见原因：`openclaw` 不
+在 PATH、权限问题（EACCES）、路径不存在（ENOENT）、以及网络/超时。
 
-- 检测到 `openclaw-weixin` 时可配置转发
-- 需要先完成微信登录：`openclaw channels login --channel openclaw-weixin`
-- `accountId` 建议填写已登录的微信账号 ID；安装器会尝试读取本地已登录账号作为默认值
-- `to` 需要填写微信插件收到的目标用户 ID，不是昵称；安装器会尝试从本地 `context-tokens.json` 读取并预填候选
-- 目标用户最好先给微信 bot 发过消息，以便微信插件缓存发送所需的 `context_token`
+## 开发
 
-## QQ Bot 转发说明
+```bash
+npm install
+npm run typecheck
+npm run build
+npm run lint
+npm run format:check
+```
 
-- 检测到 `qqbot` 时可配置转发
-- 安装器会尝试读取本地 `~/.openclaw/qqbot/data/known-users.json`，并预填已见过的 QQ Bot 目标
-- 私聊目标：让目标用户给 QQ Bot 发一句话；`to` 填 `qqbot:c2c:<user_openid>`
-- 群聊目标：在目标群里 `@你的 Bot` 发一句话；`to` 填 `qqbot:group:<group_openid>`
-- 频道目标：在频道里触发 Bot；`to` 填 `qqbot:channel:<channel_id>`
-- `accountId` 可选；只有多个 QQ Bot 账号时才需要指定，通常可用 `default`
-
-## 其他 IM 转发说明
-
-- 检测到对应插件时可配置转发
-- `accountId` 为可选项，按插件实际登录账号填写
-- `to` 需要填写目标插件 outbound 能识别的会话、用户或频道 ID
+构建产物位于 `dist/`；发布的可执行入口是 `dist/cli.js`。
 
 ## 许可证
 
-本项目使用 MIT License。
+MIT

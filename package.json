@@ -1,6 +1,6 @@
 {
   "name": "@nbetray/openclaw-looki-cli",
-  "version": "1.5.3",
+  "version": "2.0.2",
   "description": "Lightweight installer for the OpenClaw Looki channel plugin",
   "license": "MIT",
   "author": "nbetray",
@@ -14,25 +14,31 @@
   },
   "type": "module",
   "bin": {
-    "looki-installer": "./cli.mjs"
+    "looki-installer": "./dist/cli.js"
   },
   "files": [
-    "cli.mjs",
-    "i18n/",
+    "dist/",
     "README.md",
+    "README.en.md",
     "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "check": "node --check cli.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "sync:plugin-dep": "node ./scripts/sync-plugin-dep.mjs",
     "stage:version-files": "git add package.json package-lock.json",
-    "version": "npm run stage:version-files",
-    "prepublishOnly": "npm run check"
+    "version": "npm run sync:plugin-dep && npm run stage:version-files",
+    "prepublishOnly": "npm run sync:plugin-dep && npm run build"
   },
   "dependencies": {
-    "@clack/prompts": "^1.1.0"
+    "@clack/prompts": "^1.1.0",
+    "@nbetray/openclaw-looki": "2.0.2"
   },
   "peerDependencies": {
     "openclaw": ">=2026.4.24"
@@ -43,7 +49,14 @@
     }
   },
   "devDependencies": {
-    "openclaw": ">=2026.4.24"
+    "@eslint/js": "^9.16.0",
+    "@types/node": "^22.10.1",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "openclaw": ">=2026.4.24",
+    "prettier": "^3.4.2",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.18.0"
   },
   "engines": {
     "node": ">=22"
