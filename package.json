@@ -1,6 +1,6 @@
 {
   "name": "@nbetray/openclaw-looki-cli",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Lightweight installer for the OpenClaw Looki channel plugin",
   "license": "MIT",
   "author": "nbetray",
