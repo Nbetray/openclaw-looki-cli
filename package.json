@@ -1,6 +1,6 @@
 {
   "name": "@nbetray/openclaw-looki-cli",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Lightweight installer for the OpenClaw Looki channel plugin",
   "license": "MIT",
   "author": "nbetray",
@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
-    "@nbetray/openclaw-looki": "2.1.1"
+    "@nbetray/openclaw-looki": "2.1.2"
   },
   "peerDependencies": {
     "openclaw": ">=2026.4.24"
