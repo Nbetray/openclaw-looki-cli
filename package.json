@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
-    "@nbetray/openclaw-looki": "2.0.4"
+    "@nbetray/openclaw-looki": "2.1.0"
   },
   "peerDependencies": {
     "openclaw": ">=2026.4.24"

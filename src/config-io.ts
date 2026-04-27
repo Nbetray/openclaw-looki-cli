@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { getOpenclawStateDir, type Locale } from "@nbetray/openclaw-looki/shared";
+import { getOpenclawStateDir } from "@nbetray/openclaw-looki/shared";
 
 export type OpenclawConfig = {
   channels?: Record<string, unknown>;
@@ -12,8 +12,6 @@ export type OpenclawConfig = {
   };
   [key: string]: unknown;
 };
-
-const CLI_META_KEY = "openclaw-looki-cli";
 
 export function getConfigPath(): string {
   return path.join(getOpenclawStateDir(), "openclaw.json");
@@ -49,22 +47,4 @@ export function writeConfig(config: OpenclawConfig): void {
   const tmpPath = `${configPath}.${process.pid}.tmp`;
   fs.writeFileSync(tmpPath, `${JSON.stringify(config, null, 2)}\n`);
   fs.renameSync(tmpPath, configPath);
-}
-
-export function readSavedLocale(config: OpenclawConfig): Locale | null {
-  const meta = config[CLI_META_KEY];
-  if (!meta || typeof meta !== "object") return null;
-  const locale = (meta as { locale?: unknown }).locale;
-  return locale === "zh-CN" || locale === "en" ? locale : null;
-}
-
-export function withSavedLocale(config: OpenclawConfig, locale: Locale): OpenclawConfig {
-  const existing = (config[CLI_META_KEY] as Record<string, unknown> | undefined) ?? {};
-  return {
-    ...config,
-    [CLI_META_KEY]: {
-      ...existing,
-      locale,
-    },
-  };
 }

@@ -18,7 +18,6 @@ import {
   installPlugin,
   restartGateway,
 } from "./openclaw-cli.js";
-import { readConfig, readSavedLocale } from "./config-io.js";
 
 let currentLocale: Locale = DEFAULT_LOCALE;
 
@@ -35,12 +34,6 @@ function initLocale(options: CliOptions): void {
   if (options.locale) {
     setLocale(options.locale);
     return;
-  }
-  try {
-    const saved = readSavedLocale(readConfig());
-    if (saved) setLocale(saved);
-  } catch {
-    // ignore: config unreadable, fall back to default
   }
 }
 

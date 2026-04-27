@@ -17,8 +17,6 @@ import {
   ConfigReadError,
   getConfigPath,
   readConfig,
-  readSavedLocale,
-  withSavedLocale,
   writeConfig,
   type OpenclawConfig,
 } from "./config-io.js";
@@ -97,11 +95,8 @@ export async function runConfigure(
   overrides: ConfigureOverrides = {},
 ): Promise<ConfigureResult> {
   const existing = resolveInitialConfig(t);
-  const savedLocale = readSavedLocale(existing);
-  const initialLocale = pickInitialLocale(overrides, savedLocale);
-  // Skip the language prompt when the user already picked one last time,
-  // or forced one via --locale.
-  const alreadyDecided = overrides.locale != null || savedLocale != null;
+  const initialLocale = pickInitialLocale(overrides, null);
+  const alreadyDecided = overrides.locale != null;
   const locale = await chooseLocale(initialLocale, alreadyDecided, t, setLocale);
 
   let baseUrl = overrides.baseUrl ?? "";
@@ -149,14 +144,13 @@ export async function runConfigure(
 
   const forwardTo = await runForwardWizard(t, existing);
 
-  let nextConfig = patchLookiChannelConfig(existing, {
+  const nextConfig = patchLookiChannelConfig(existing, {
     enabled: true,
     baseUrl,
     apiKey,
     accountId: DEFAULT_ACCOUNT_ID,
     forwardTo,
   });
-  nextConfig = withSavedLocale(nextConfig, locale);
 
   writeConfig(nextConfig);
   await note(t("configWritten", { path: getConfigPath() }), t("configWrittenTitle"));
