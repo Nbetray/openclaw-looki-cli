@@ -38,7 +38,7 @@ npx -y @nbetray/openclaw-looki-cli@latest help
 
 当前支持：
 
-- `openclaw-lark`：飞书 / Lark
+- `feishu`：飞书 / Lark（由 `@larksuite/openclaw-lark` 提供）
 - `openclaw-weixin`：微信 / WeChat
 - `qqbot`：QQ Bot
 - `line`：LINE
@@ -48,7 +48,7 @@ npx -y @nbetray/openclaw-looki-cli@latest help
 
 ## 飞书 / Lark 转发说明
 
-- 检测到 `openclaw-lark` 时可配置转发
+- 检测到 `@larksuite/openclaw-lark` / `feishu` 时可配置转发
 - `to` 需要填写目标飞书 / Lark 用户的 `open_id`
 - 安装器不会自动帮你填写默认 `to`
 

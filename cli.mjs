@@ -29,9 +29,9 @@ const UI_LANGUAGE_OPTIONS = [
 const SUPPORTED_FORWARD_PLUGINS = [
   {
     id: "openclaw-lark",
-    detectIds: ["openclaw-lark"],
+    detectIds: ["feishu", "openclaw-lark", "@larksuite/openclaw-lark"],
     label: "飞书 / Lark",
-    channel: "openclaw-lark",
+    channel: "feishu",
     accountId: "default",
     hint: "把 Looki 的 Agent 输出转发到飞书 / Lark",
   },
@@ -272,9 +272,14 @@ function detectForwardTargets(config) {
 }
 
 function getExistingFeishuAllowFrom(config) {
-  const value = config?.channels?.["openclaw-lark"]?.allowFrom;
-  if (!Array.isArray(value)) return [];
-  return value.map((entry) => String(entry).trim()).filter(Boolean);
+  const feishu = config?.channels?.feishu;
+  const values = [
+    ...(Array.isArray(feishu?.allowFrom) ? feishu.allowFrom : []),
+    ...Object.values(feishu?.accounts ?? {}).flatMap((account) =>
+      Array.isArray(account?.allowFrom) ? account.allowFrom : [],
+    ),
+  ];
+  return [...new Set(values.map((entry) => String(entry).trim()).filter((entry) => entry && entry !== "*"))];
 }
 
 function getWeixinAccountIds() {
@@ -381,7 +386,7 @@ function formatDraftHint(target, draftValues, draftAccountIds) {
 function isForwardTargetDraftValid(target, draftValues, draftAccountIds, config) {
   const to = draftValues[target.id];
   if (!to) return false;
-  if (target.channel === "openclaw-lark") return isValidFeishuTo(to, getExistingFeishuAllowFrom(config));
+  if (target.channel === "feishu") return isValidFeishuTo(to, getExistingFeishuAllowFrom(config));
   if (target.channel === "openclaw-weixin") return Boolean(draftAccountIds[target.id] || target.accountId);
   return true;
 }
@@ -570,7 +575,7 @@ async function configureForwardTargets(config, availableTargets) {
       continue;
     }
 
-    if (target.channel === "openclaw-lark") {
+    if (target.channel === "feishu") {
       const value = await configureFeishuTarget(target, config, draftValues);
       if (value === null) continue;
       draftValues[target.id] = value;
