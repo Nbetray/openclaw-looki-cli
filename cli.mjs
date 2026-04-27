@@ -47,6 +47,7 @@ const SUPPORTED_FORWARD_PLUGINS = [
     detectIds: ["qqbot"],
     label: "QQ Bot",
     channel: "qqbot",
+    accountId: "default",
     hint: "把 Looki 的 Agent 输出转发到 QQ Bot",
   },
   {
@@ -320,6 +321,43 @@ function getWeixinContextUserIds(accountId) {
   return [...ids];
 }
 
+function toNonEmptyString(value) {
+  return String(value ?? "").trim();
+}
+
+function getQQBotKnownTargets() {
+  const filePath = path.join(getStateDir(), "qqbot", "data", "known-users.json");
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .flatMap((entry) => {
+        const accountId = toNonEmptyString(entry?.accountId);
+        const type = toNonEmptyString(entry?.type).toLowerCase();
+        const openid = toNonEmptyString(entry?.openid);
+        const groupOpenid = toNonEmptyString(entry?.groupOpenid);
+        const channelId = toNonEmptyString(entry?.channelId);
+
+        if (type === "group" && groupOpenid) {
+          return [{ accountId, to: `qqbot:group:${groupOpenid}` }];
+        }
+        if (type === "channel" && channelId) {
+          return [{ accountId, to: `qqbot:channel:${channelId}` }];
+        }
+        if (openid) {
+          return [{ accountId, to: `qqbot:c2c:${openid}` }];
+        }
+        return [];
+      })
+      .filter((entry, index, array) =>
+        array.findIndex((candidate) => candidate.accountId === entry.accountId && candidate.to === entry.to) === index,
+      );
+  } catch {
+    return [];
+  }
+}
+
 function isValidFeishuTo(value, candidates) {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return false;
@@ -377,7 +415,7 @@ function formatDraftHint(target, draftValues, draftAccountIds) {
   const to = draftValues[target.id];
   const accountId = draftAccountIds[target.id] || target.accountId;
   if (!to && !accountId) return "";
-  if (target.channel === "openclaw-weixin") {
+  if (target.channel === "openclaw-weixin" || target.channel === "qqbot") {
     return [accountId ? `accountId=${accountId}` : "", to ? `to=${to}` : ""].filter(Boolean).join(" ");
   }
   return to;
@@ -454,6 +492,8 @@ async function configureFeishuTarget(target, config, draftValues) {
 }
 
 async function configureWeixinTarget(target, draftValues, draftAccountIds) {
+  await note(t("weixinTargetHelp"), t("weixinTargetHelpTitle"));
+
   const accountIds = getWeixinAccountIds();
   if (accountIds.length > 0) {
     await note(t("weixinAccountsDetected", { values: accountIds.join(", ") }), t("weixinAccountsTitle"));
@@ -474,6 +514,42 @@ async function configureWeixinTarget(target, draftValues, draftAccountIds) {
   const to = await promptTextOrBack(t("weixinToMessage"), {
     placeholder: userIds[0] || "weixin_user_id",
     defaultValue: draftValues[target.id] || userIds[0] || undefined,
+    validate: (input) => (String(input ?? "").trim() ? undefined : t("requiredField")),
+  });
+  if (to === null) return null;
+
+  return { accountId, to };
+}
+
+async function configureQQBotTarget(target, draftValues, draftAccountIds) {
+  await note(t("qqbotTargetHelp"), t("qqbotTargetHelpTitle"));
+
+  const knownTargets = getQQBotKnownTargets();
+  const accountIds = [...new Set(knownTargets.map((entry) => entry.accountId).filter(Boolean))];
+  const defaultAccountId = draftAccountIds[target.id] || accountIds[0] || target.accountId || undefined;
+
+  if (knownTargets.length > 0) {
+    await note(
+      t("qqbotTargetsDetected", {
+        values: knownTargets.map((entry) =>
+          [entry.accountId ? `accountId=${entry.accountId}` : "", `to=${entry.to}`].filter(Boolean).join(" "),
+        ).join(", "),
+      }),
+      t("qqbotTargetsTitle"),
+    );
+  }
+
+  const accountId = await promptTextOrBack(t("qqbotAccountIdMessage"), {
+    placeholder: defaultAccountId || "default",
+    defaultValue: defaultAccountId,
+  });
+  if (accountId === null) return null;
+
+  const matchedTargets = knownTargets.filter((entry) => !accountId || entry.accountId === accountId);
+  const defaultTo = draftValues[target.id] || matchedTargets[0]?.to || knownTargets[0]?.to || undefined;
+  const to = await promptTextOrBack(t("qqbotToMessage"), {
+    placeholder: defaultTo || "qqbot:c2c:<user_openid>",
+    defaultValue: defaultTo,
     validate: (input) => (String(input ?? "").trim() ? undefined : t("requiredField")),
   });
   if (to === null) return null;
@@ -589,6 +665,19 @@ async function configureForwardTargets(config, availableTargets) {
 
     if (target.channel === "openclaw-weixin") {
       const value = await configureWeixinTarget(target, draftValues, draftAccountIds);
+      if (value === null) continue;
+      draftValues[target.id] = value.to;
+      draftAccountIds[target.id] = value.accountId;
+      if (isForwardTargetDraftValid(target, draftValues, draftAccountIds, config)) {
+        validTargetIds = [...validTargetIds, target.id].filter((value, index, array) => array.indexOf(value) === index);
+      } else {
+        validTargetIds = validTargetIds.filter((id) => id !== target.id);
+      }
+      continue;
+    }
+
+    if (target.channel === "qqbot") {
+      const value = await configureQQBotTarget(target, draftValues, draftAccountIds);
       if (value === null) continue;
       draftValues[target.id] = value.to;
       draftAccountIds[target.id] = value.accountId;
