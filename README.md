@@ -43,7 +43,7 @@ npx -y @nbetray/openclaw-looki-cli help
 - 检测到 `openclaw-weixin` 时可配置转发
 - 需要先完成微信登录：`openclaw channels login --channel openclaw-weixin`
 - `accountId` 建议填写已登录的微信账号 ID；安装器会尝试读取本地已登录账号作为默认值
-- `to` 需要填写微信插件收到的目标用户 ID，不是昵称
+- `to` 需要填写微信插件收到的目标用户 ID，不是昵称；安装器会尝试从本地 `context-tokens.json` 读取并预填候选
 - 目标用户最好先给微信 bot 发过消息，以便微信插件缓存发送所需的 `context_token`
 
 ## 许可证

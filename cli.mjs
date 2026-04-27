@@ -100,6 +100,8 @@ const MESSAGES = {
     feishuToMessage: "填写飞书(FeiShu) to（Esc 返回）",
     weixinAccountsTitle: "微信(Weixin)账号",
     weixinAccountsDetected: ({ values }) => `检测到已登录微信账号：${values}`,
+    weixinUsersTitle: "微信(Weixin)用户候选",
+    weixinUsersDetected: ({ values }) => `检测到可发送的微信用户 ID：${values}`,
     weixinAccountIdMessage: "填写微信(Weixin) accountId（Esc 返回）",
     weixinToMessage: "填写微信(Weixin) to / user_id（Esc 返回）",
     forwardTargetMessage: "请选择需要转发 Agent 输出的聊天插件",
@@ -171,6 +173,8 @@ const MESSAGES = {
     feishuToMessage: "Enter FeiShu to (Esc to go back)",
     weixinAccountsTitle: "Weixin Accounts",
     weixinAccountsDetected: ({ values }) => `Detected logged-in Weixin accounts: ${values}`,
+    weixinUsersTitle: "Weixin User Candidates",
+    weixinUsersDetected: ({ values }) => `Detected sendable Weixin user IDs: ${values}`,
     weixinAccountIdMessage: "Enter Weixin accountId (Esc to go back)",
     weixinToMessage: "Enter Weixin to / user_id (Esc to go back)",
     forwardTargetMessage: "Choose chat plugins for Agent output forwarding",
@@ -337,7 +341,9 @@ function hasPluginInstalled(config, plugin) {
     installs?.[detectId] ||
     entries?.[detectId]?.enabled === true ||
     allow.includes(detectId),
-  )) || Boolean(config?.channels?.[plugin.channel]);
+  )) || Boolean(config?.channels?.[plugin.channel]) || (
+    plugin.channel === "openclaw-weixin" && getWeixinAccountIds().length > 0
+  );
 }
 
 function detectForwardTargets(config) {
@@ -367,6 +373,33 @@ function getWeixinAccountIds() {
   } catch {
     return [];
   }
+}
+
+function getWeixinContextUserIds(accountId) {
+  const accountsDir = path.join(getStateDir(), "openclaw-weixin", "accounts");
+  const candidateFiles = accountId
+    ? [path.join(accountsDir, `${accountId}.context-tokens.json`)]
+    : fs.existsSync(accountsDir)
+      ? fs.readdirSync(accountsDir)
+        .filter((name) => name.endsWith(".context-tokens.json"))
+        .map((name) => path.join(accountsDir, name))
+      : [];
+  const ids = new Set();
+
+  for (const filePath of candidateFiles) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      for (const key of Object.keys(parsed)) {
+        const id = String(key).trim();
+        if (id) ids.add(id);
+      }
+    } catch {
+      // ignore missing or malformed token cache files
+    }
+  }
+
+  return [...ids];
 }
 
 function isValidFeishuTo(value, candidates) {
@@ -515,9 +548,14 @@ async function configureWeixinTarget(target, draftValues, draftAccountIds) {
   });
   if (accountId === null) return null;
 
+  const userIds = getWeixinContextUserIds(accountId);
+  if (userIds.length > 0) {
+    await note(t("weixinUsersDetected", { values: userIds.join(", ") }), t("weixinUsersTitle"));
+  }
+
   const to = await promptTextOrBack(t("weixinToMessage"), {
-    placeholder: "weixin_user_id",
-    defaultValue: draftValues[target.id] || undefined,
+    placeholder: userIds[0] || "weixin_user_id",
+    defaultValue: draftValues[target.id] || userIds[0] || undefined,
     validate: (input) => (String(input ?? "").trim() ? undefined : t("requiredField")),
   });
   if (to === null) return null;
