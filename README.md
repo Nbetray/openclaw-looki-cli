@@ -1,6 +1,6 @@
 # openclaw-looki-cli
 
-用于安装和配置 `@nbetray/openclaw-looki` 的命令行向导。
+用于安装和配置 `@nbetray/openclaw-looki@latest` 的命令行向导。
 
 ## 要求
 
@@ -10,13 +10,13 @@
 ## 使用
 
 ```bash
-npx -y @nbetray/openclaw-looki-cli install
+npx -y @nbetray/openclaw-looki-cli@latest install
 ```
 
 也可以先查看帮助：
 
 ```bash
-npx -y @nbetray/openclaw-looki-cli help
+npx -y @nbetray/openclaw-looki-cli@latest help
 ```
 
 向导会完成：
@@ -42,6 +42,7 @@ npx -y @nbetray/openclaw-looki-cli help
 
 - 检测到 `openclaw-weixin` 时可配置转发
 - 需要先完成微信登录：`openclaw channels login --channel openclaw-weixin`
+- 需要使用支持跨 channel outbound adapter 的 OpenClaw 版本（建议 `>= 2026.4.22`）
 - `accountId` 建议填写已登录的微信账号 ID；安装器会尝试读取本地已登录账号作为默认值
 - `to` 需要填写微信插件收到的目标用户 ID，不是昵称；安装器会尝试从本地 `context-tokens.json` 读取并预填候选
 - 目标用户最好先给微信 bot 发过消息，以便微信插件缓存发送所需的 `context_token`

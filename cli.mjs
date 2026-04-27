@@ -18,6 +18,7 @@ import {
 const PLUGIN_SPEC = "@nbetray/openclaw-looki";
 const CHANNEL_ID = "openclaw-looki";
 const MIN_OPENCLAW_VERSION = "2026.3.24";
+const MIN_WEIXIN_OUTBOUND_VERSION = "2026.4.22";
 const DEFAULT_LOCALE = "zh-CN";
 const GLOBAL_BASE_URL = "https://open.looki.ai";
 const CHINA_BASE_URL = "https://open.looki.tech";
@@ -53,6 +54,8 @@ const MESSAGES = {
     openclawFound: "已找到本地安装的 openclaw",
     versionMissing: "无法获取 openclaw 版本号，请确认 `openclaw --version` 正常工作",
     versionTooLow: ({ version }) => `当前 OpenClaw 版本 ${version} 过低，需要 >= ${MIN_OPENCLAW_VERSION}`,
+    weixinVersionTooLow: ({ version }) =>
+      `当前 OpenClaw 版本 ${version} 不支持微信跨 channel 转发，需要 >= ${MIN_WEIXIN_OUTBOUND_VERSION}`,
     versionDetected: ({ version }) => `检测到 OpenClaw 版本: ${version}`,
     requiredField: "该项必填",
     invalidAllowFrom: "请填写正确的 allowFrom",
@@ -126,6 +129,8 @@ const MESSAGES = {
     openclawFound: "Found a local OpenClaw installation",
     versionMissing: "Could not detect the OpenClaw version. Please make sure `openclaw --version` works.",
     versionTooLow: ({ version }) => `OpenClaw ${version} is too old. Required: >= ${MIN_OPENCLAW_VERSION}`,
+    weixinVersionTooLow: ({ version }) =>
+      `OpenClaw ${version} does not support Weixin cross-channel forwarding. Required: >= ${MIN_WEIXIN_OUTBOUND_VERSION}`,
     versionDetected: ({ version }) => `Detected OpenClaw version: ${version}`,
     requiredField: "This field is required",
     invalidAllowFrom: "Please enter a valid allowFrom value",
@@ -726,7 +731,15 @@ function restartGateway() {
   }
 }
 
-async function configureLooki() {
+function ensureWeixinForwardingVersion(openclawVersion, forwardTo) {
+  const hasWeixinForwarding = forwardTo.some((target) => target.channel === "openclaw-weixin");
+  if (!hasWeixinForwarding) return;
+  if (compareVersions(openclawVersion, MIN_WEIXIN_OUTBOUND_VERSION) >= 0) return;
+  error(t("weixinVersionTooLow", { version: openclawVersion }));
+  process.exit(1);
+}
+
+async function configureLooki(openclawVersion) {
   const config = readConfig();
   currentLocale = guardCancel(await select({
     message: "选择界面语言 / Choose interface language",
@@ -763,6 +776,7 @@ async function configureLooki() {
     );
     forwardTo = await configureForwardTargets(config, availableTargets);
   }
+  ensureWeixinForwardingVersion(openclawVersion, forwardTo);
 
   const nextConfig = mergeLookiChannelConfig(config, {
     enabled: true,
@@ -778,9 +792,9 @@ async function configureLooki() {
 
 async function install() {
   ensureOpenclawInstalled();
-  ensureHostVersion();
+  const openclawVersion = ensureHostVersion();
   installPlugin();
-  await configureLooki();
+  await configureLooki(openclawVersion);
   restartGateway();
   outro(t("outro"));
 }
