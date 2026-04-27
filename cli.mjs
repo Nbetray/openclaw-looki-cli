@@ -4,6 +4,7 @@ import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   cancel,
   intro,
@@ -17,8 +18,7 @@ import {
 
 const PLUGIN_SPEC = "@nbetray/openclaw-looki";
 const CHANNEL_ID = "openclaw-looki";
-const MIN_OPENCLAW_VERSION = "2026.3.24";
-const MIN_WEIXIN_OUTBOUND_VERSION = "2026.4.22";
+const MIN_OPENCLAW_VERSION = "2026.4.24";
 const DEFAULT_LOCALE = "zh-CN";
 const GLOBAL_BASE_URL = "https://open.looki.ai";
 const CHINA_BASE_URL = "https://open.looki.tech";
@@ -30,178 +30,94 @@ const SUPPORTED_FORWARD_PLUGINS = [
   {
     id: "openclaw-lark",
     detectIds: ["openclaw-lark"],
-    label: "飞书(FeiShu)",
-    channel: "feishu",
+    label: "飞书 / Lark",
+    channel: "openclaw-lark",
     accountId: "default",
-    hint: "把 Looki 的 Agent 输出转发到飞书(FeiShu)",
+    hint: "把 Looki 的 Agent 输出转发到飞书 / Lark",
   },
   {
     id: "openclaw-weixin",
-    detectIds: ["openclaw-weixin", "@tencent-weixin/openclaw-weixin"],
-    label: "微信(Weixin)",
+    detectIds: ["openclaw-weixin"],
+    label: "微信 / WeChat",
     channel: "openclaw-weixin",
-    hint: "把 Looki 的 Agent 输出转发到微信(Weixin)",
+    hint: "把 Looki 的 Agent 输出转发到微信 / WeChat",
+  },
+  {
+    id: "qqbot",
+    detectIds: ["qqbot"],
+    label: "QQ Bot",
+    channel: "qqbot",
+    hint: "把 Looki 的 Agent 输出转发到 QQ Bot",
+  },
+  {
+    id: "line",
+    detectIds: ["line"],
+    label: "LINE",
+    channel: "line",
+    hint: "把 Looki 的 Agent 输出转发到 LINE",
+  },
+  {
+    id: "whatsapp",
+    detectIds: ["whatsapp"],
+    label: "WhatsApp",
+    channel: "whatsapp",
+    hint: "把 Looki 的 Agent 输出转发到 WhatsApp",
+  },
+  {
+    id: "telegram",
+    detectIds: ["telegram"],
+    label: "Telegram",
+    channel: "telegram",
+    hint: "把 Looki 的 Agent 输出转发到 Telegram",
+  },
+  {
+    id: "discord",
+    detectIds: ["discord"],
+    label: "Discord",
+    channel: "discord",
+    hint: "把 Looki 的 Agent 输出转发到 Discord",
   },
 ];
 
 let currentLocale = DEFAULT_LOCALE;
 
-const MESSAGES = {
-  "zh-CN": {
-    cancelled: "已取消 Looki 安装",
-    openclawMissing: "未找到 openclaw，请先安装：",
-    docsHint: "  详见 https://docs.openclaw.ai/install",
-    openclawFound: "已找到本地安装的 openclaw",
-    versionMissing: "无法获取 openclaw 版本号，请确认 `openclaw --version` 正常工作",
-    versionTooLow: ({ version }) => `当前 OpenClaw 版本 ${version} 过低，需要 >= ${MIN_OPENCLAW_VERSION}`,
-    weixinVersionTooLow: ({ version }) =>
-      `当前 OpenClaw 版本 ${version} 不支持微信跨 channel 转发，需要 >= ${MIN_WEIXIN_OUTBOUND_VERSION}`,
-    versionDetected: ({ version }) => `检测到 OpenClaw 版本: ${version}`,
-    requiredField: "该项必填",
-    invalidAllowFrom: "请填写正确的 allowFrom",
-    installStart: `正在安装插件 ${PLUGIN_SPEC}`,
-    installDone: "Looki 插件安装完成",
-    installUpdate: "检测到本地已安装，开始更新",
-    installUpdated: "Looki 插件更新完成",
-    installFailed: "Looki 插件安装失败",
-    installFailedManual: "插件安装失败，请手动执行：",
-    updateFailedManual: "插件更新失败，请手动执行：",
-    restartStart: "正在重启 OpenClaw Gateway",
-    restartDone: "OpenClaw Gateway 已重启",
-    restartFailed: "OpenClaw Gateway 重启失败",
-    restartFailedManual: "重启失败，可手动执行：",
-    intro: "OpenClaw Looki 安装向导",
-    languageTitle: "界面语言",
-    languageMessage: "选择界面语言（仅影响当前向导，不会写入配置）",
-    envTitle: "环境选择",
-    envNote: "第一步：选择部署环境，对应写入 Looki 的 baseUrl。",
-    envMessage: "请选择环境",
-    envOptionGlobal: "Global",
-    envOptionChina: "China",
-    envHintGlobal: "海外环境",
-    envHintChina: "中国大陆环境",
-    apiKeyTitle: "API Key",
-    apiKeyNote: "第二步：填写 Looki 的 API Key。",
-    apiKeyMessage: "请输入 apiKey",
-    pluginTitle: "插件检测",
-    pluginNone: "当前未检测到可转发插件，先只保存 Looki 基础配置。",
-    pluginDetected: ({ labels }) => `检测到已安装插件：${labels}`,
-    listControlsTitle: "操作提示",
-    listControls: "Enter 配置 · Esc 退出",
-    pageControlsTitle: "页面操作",
-    pageControlsConfigured: "Enter 选择操作：修改、取消配置、返回",
-    pageControlsUnconfigured: "Enter 进入填写页，Esc 返回列表",
-    actionMessage: ({ label }) => `${label} 操作`,
-    actionEdit: "修改配置",
-    actionEditHint: "重新填写 to",
-    actionClear: "取消配置",
-    actionClearHint: "移除这一项的转发配置",
-    actionBack: "返回",
-    actionBackHint: "回到插件列表",
-    allowFromTitle: "飞书(FeiShu)候选",
-    allowFromDetected: ({ values }) => `检测到现有飞书(FeiShu) allowFrom：${values}`,
-    feishuToMessage: "填写飞书(FeiShu) to（Esc 返回）",
-    weixinAccountsTitle: "微信(Weixin)账号",
-    weixinAccountsDetected: ({ values }) => `检测到已登录微信账号：${values}`,
-    weixinUsersTitle: "微信(Weixin)用户候选",
-    weixinUsersDetected: ({ values }) => `检测到可发送的微信用户 ID：${values}`,
-    weixinAccountIdMessage: "填写微信(Weixin) accountId（Esc 返回）",
-    weixinToMessage: "填写微信(Weixin) to / user_id（Esc 返回）",
-    forwardTargetMessage: "请选择需要转发 Agent 输出的聊天插件",
-    doneLabel: "完成",
-    doneHint: ({ count }) => (count > 0 ? `已完成 ${count} 项` : "暂不配置转发"),
-    configuredHint: ({ value }) => `已填写 ${value}`,
-    invalidHint: ({ value }) => `未完成：${value}`,
-    emptyHint: "未填写",
-    configWritten: ({ path }) => `配置已写入：${path}`,
-    configWrittenTitle: "配置完成",
-    outro: "Looki 安装完成",
-    helpUsage: "  用法: npx -y @nbetray/openclaw-looki-cli <命令>",
-    helpCommands: "  命令:",
-    helpInstall: "    install   安装 Looki 插件并完成基础配置",
-    helpHelp: "    help      显示帮助信息",
-    unknownCommand: ({ command }) => `未知命令: ${command}`,
-  },
-  en: {
-    cancelled: "Looki install cancelled",
-    openclawMissing: "OpenClaw was not found. Please install it first:",
-    docsHint: "  Docs: https://docs.openclaw.ai/install",
-    openclawFound: "Found a local OpenClaw installation",
-    versionMissing: "Could not detect the OpenClaw version. Please make sure `openclaw --version` works.",
-    versionTooLow: ({ version }) => `OpenClaw ${version} is too old. Required: >= ${MIN_OPENCLAW_VERSION}`,
-    weixinVersionTooLow: ({ version }) =>
-      `OpenClaw ${version} does not support Weixin cross-channel forwarding. Required: >= ${MIN_WEIXIN_OUTBOUND_VERSION}`,
-    versionDetected: ({ version }) => `Detected OpenClaw version: ${version}`,
-    requiredField: "This field is required",
-    invalidAllowFrom: "Please enter a valid allowFrom value",
-    installStart: `Installing plugin ${PLUGIN_SPEC}`,
-    installDone: "Looki plugin installed",
-    installUpdate: "Plugin already installed, updating",
-    installUpdated: "Looki plugin updated",
-    installFailed: "Looki plugin install failed",
-    installFailedManual: "Plugin install failed. Please run it manually:",
-    updateFailedManual: "Plugin update failed. Please run it manually:",
-    restartStart: "Restarting OpenClaw Gateway",
-    restartDone: "OpenClaw Gateway restarted",
-    restartFailed: "OpenClaw Gateway restart failed",
-    restartFailedManual: "Restart failed. You can run this manually:",
-    intro: "OpenClaw Looki installer",
-    languageTitle: "Language",
-    languageMessage: "Choose the interface language (only for this wizard, not saved)",
-    envTitle: "Environment",
-    envNote: "Step 1: choose the deployment environment. This controls Looki baseUrl.",
-    envMessage: "Choose environment",
-    envOptionGlobal: "Global",
-    envOptionChina: "China",
-    envHintGlobal: "Global deployment",
-    envHintChina: "Mainland China deployment",
-    apiKeyTitle: "API Key",
-    apiKeyNote: "Step 2: enter the Looki API key.",
-    apiKeyMessage: "Enter apiKey",
-    pluginTitle: "Plugin Detection",
-    pluginNone: "No forwarding plugins were detected. Only the basic Looki config will be saved.",
-    pluginDetected: ({ labels }) => `Detected installed plugins: ${labels}`,
-    listControlsTitle: "Hint",
-    listControls: "Enter to configure · Esc to exit",
-    pageControlsTitle: "Page",
-    pageControlsConfigured: "Enter to choose: edit, clear, or back",
-    pageControlsUnconfigured: "Enter to configure · Esc to go back",
-    actionMessage: ({ label }) => `${label} actions`,
-    actionEdit: "Edit",
-    actionEditHint: "Enter or update the target",
-    actionClear: "Clear",
-    actionClearHint: "Remove this forwarding target",
-    actionBack: "Back",
-    actionBackHint: "Return to the plugin list",
-    allowFromTitle: "FeiShu Candidates",
-    allowFromDetected: ({ values }) => `Detected FeiShu allowFrom values: ${values}`,
-    feishuToMessage: "Enter FeiShu to (Esc to go back)",
-    weixinAccountsTitle: "Weixin Accounts",
-    weixinAccountsDetected: ({ values }) => `Detected logged-in Weixin accounts: ${values}`,
-    weixinUsersTitle: "Weixin User Candidates",
-    weixinUsersDetected: ({ values }) => `Detected sendable Weixin user IDs: ${values}`,
-    weixinAccountIdMessage: "Enter Weixin accountId (Esc to go back)",
-    weixinToMessage: "Enter Weixin to / user_id (Esc to go back)",
-    forwardTargetMessage: "Choose chat plugins for Agent output forwarding",
-    doneLabel: "Done",
-    doneHint: ({ count }) => (count > 0 ? `${count} configured` : "Skip forwarding for now"),
-    configuredHint: ({ value }) => `Configured: ${value}`,
-    invalidHint: ({ value }) => `Incomplete: ${value}`,
-    emptyHint: "Not configured",
-    configWritten: ({ path }) => `Configuration written to: ${path}`,
-    configWrittenTitle: "Saved",
-    outro: "Looki install complete",
-    helpUsage: "  Usage: npx -y @nbetray/openclaw-looki-cli <command>",
-    helpCommands: "  Commands:",
-    helpInstall: "    install   Install the Looki plugin and complete basic setup",
-    helpHelp: "    help      Show help",
-    unknownCommand: ({ command }) => `Unknown command: ${command}`,
-  },
+const MESSAGES = loadLocaleMessages();
+const GLOBAL_MESSAGE_PARAMS = {
+  pluginSpec: PLUGIN_SPEC,
+  minOpenclawVersion: MIN_OPENCLAW_VERSION,
 };
 
+function readLocaleMessages(locale) {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const filePath = path.join(currentDir, "i18n", `${locale}.json`);
+  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+}
+
+function loadLocaleMessages() {
+  return {
+    "zh-CN": readLocaleMessages("zh-CN"),
+    en: readLocaleMessages("en"),
+  };
+}
+
+function selectMessageTemplate(value, params) {
+  if (typeof value === "string") return value;
+  const count = Number(params.count ?? 0);
+  if (count === 0 && value.zero) return value.zero;
+  if (count === 1 && value.one) return value.one;
+  return value.other;
+}
+
+function interpolate(template, params) {
+  return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, key) =>
+    params[key] === undefined ? match : String(params[key]),
+  );
+}
+
 function t(key, params = {}) {
-  const entry = MESSAGES[currentLocale]?.[key] ?? MESSAGES[DEFAULT_LOCALE][key];
-  return typeof entry === "function" ? entry(params) : entry;
+  const mergedParams = { ...GLOBAL_MESSAGE_PARAMS, ...params };
+  const value = MESSAGES[currentLocale]?.[key] ?? MESSAGES[DEFAULT_LOCALE][key] ?? key;
+  return interpolate(selectMessageTemplate(value, mergedParams), mergedParams);
 }
 
 function getBaseUrlOptions() {
@@ -356,17 +272,9 @@ function detectForwardTargets(config) {
 }
 
 function getExistingFeishuAllowFrom(config) {
-  const value = config?.channels?.feishu?.allowFrom;
+  const value = config?.channels?.["openclaw-lark"]?.allowFrom;
   if (!Array.isArray(value)) return [];
   return value.map((entry) => String(entry).trim()).filter(Boolean);
-}
-
-function getExistingForwardChannels(config) {
-  const forwardTo = config?.channels?.[CHANNEL_ID]?.forwardTo;
-  if (!Array.isArray(forwardTo)) return [];
-  return forwardTo
-    .map((entry) => String(entry?.channel ?? "").trim())
-    .filter(Boolean);
 }
 
 function getWeixinAccountIds() {
@@ -473,7 +381,7 @@ function formatDraftHint(target, draftValues, draftAccountIds) {
 function isForwardTargetDraftValid(target, draftValues, draftAccountIds, config) {
   const to = draftValues[target.id];
   if (!to) return false;
-  if (target.channel === "feishu") return isValidFeishuTo(to, getExistingFeishuAllowFrom(config));
+  if (target.channel === "openclaw-lark") return isValidFeishuTo(to, getExistingFeishuAllowFrom(config));
   if (target.channel === "openclaw-weixin") return Boolean(draftAccountIds[target.id] || target.accountId);
   return true;
 }
@@ -568,6 +476,23 @@ async function configureWeixinTarget(target, draftValues, draftAccountIds) {
   return { accountId, to };
 }
 
+async function configureGenericTarget(target, draftValues, draftAccountIds) {
+  const accountId = await promptTextOrBack(t("genericAccountIdMessage", { label: target.label }), {
+    placeholder: `${target.channel}-account-id`,
+    defaultValue: draftAccountIds[target.id] || target.accountId || undefined,
+  });
+  if (accountId === null) return null;
+
+  const to = await promptTextOrBack(t("genericToMessage", { label: target.label }), {
+    placeholder: `${target.channel}-target-id`,
+    defaultValue: draftValues[target.id] || undefined,
+    validate: (input) => (String(input ?? "").trim() ? undefined : t("requiredField")),
+  });
+  if (to === null) return null;
+
+  return { accountId, to };
+}
+
 function buildInitialDraftValues(config, availableTargets) {
   const currentTargets = Array.isArray(config?.channels?.[CHANNEL_ID]?.forwardTo)
     ? [...config.channels[CHANNEL_ID].forwardTo]
@@ -645,7 +570,7 @@ async function configureForwardTargets(config, availableTargets) {
       continue;
     }
 
-    if (target.channel === "feishu") {
+    if (target.channel === "openclaw-lark") {
       const value = await configureFeishuTarget(target, config, draftValues);
       if (value === null) continue;
       draftValues[target.id] = value;
@@ -670,7 +595,15 @@ async function configureForwardTargets(config, availableTargets) {
       continue;
     }
 
-    validTargetIds = [...validTargetIds, target.id].filter((value, index, array) => array.indexOf(value) === index);
+    const value = await configureGenericTarget(target, draftValues, draftAccountIds);
+    if (value === null) continue;
+    draftValues[target.id] = value.to;
+    draftAccountIds[target.id] = value.accountId;
+    if (isForwardTargetDraftValid(target, draftValues, draftAccountIds, config)) {
+      validTargetIds = [...validTargetIds, target.id].filter((value, index, array) => array.indexOf(value) === index);
+    } else {
+      validTargetIds = validTargetIds.filter((id) => id !== target.id);
+    }
   }
 }
 
@@ -731,14 +664,6 @@ function restartGateway() {
   }
 }
 
-function ensureWeixinForwardingVersion(openclawVersion, forwardTo) {
-  const hasWeixinForwarding = forwardTo.some((target) => target.channel === "openclaw-weixin");
-  if (!hasWeixinForwarding) return;
-  if (compareVersions(openclawVersion, MIN_WEIXIN_OUTBOUND_VERSION) >= 0) return;
-  error(t("weixinVersionTooLow", { version: openclawVersion }));
-  process.exit(1);
-}
-
 async function configureLooki(openclawVersion) {
   const config = readConfig();
   currentLocale = guardCancel(await select({
@@ -776,7 +701,6 @@ async function configureLooki(openclawVersion) {
     );
     forwardTo = await configureForwardTargets(config, availableTargets);
   }
-  ensureWeixinForwardingVersion(openclawVersion, forwardTo);
 
   const nextConfig = mergeLookiChannelConfig(config, {
     enabled: true,

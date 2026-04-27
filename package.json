@@ -18,6 +18,7 @@
   },
   "files": [
     "cli.mjs",
+    "i18n/",
     "README.md",
     "LICENSE"
   ],
@@ -34,7 +35,7 @@
     "@clack/prompts": "^1.1.0"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.3.24"
+    "openclaw": ">=2026.4.24"
   },
   "peerDependenciesMeta": {
     "openclaw": {
@@ -42,7 +43,7 @@
     }
   },
   "devDependencies": {
-    "openclaw": "2026.3.24"
+    "openclaw": ">=2026.4.24"
   },
   "engines": {
     "node": ">=22"
